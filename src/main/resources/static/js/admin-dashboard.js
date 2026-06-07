@@ -2,6 +2,7 @@
     "use strict";
 
     var state = {
+        page: "overview",
         server: "",
         path: "",
         selectedFile: "",
@@ -14,12 +15,22 @@
     document.addEventListener("DOMContentLoaded", function () {
         elements = {
             serverSelect: document.getElementById("serverSelect"),
+            navItems: Array.from(document.querySelectorAll("[data-page]")),
+            pageViews: Array.from(document.querySelectorAll("[data-page-view]")),
+            pageTitle: document.getElementById("pageTitle"),
+            pageKicker: document.getElementById("pageKicker"),
+            activeServerBadge: document.getElementById("activeServerBadge"),
             startForm: document.getElementById("startForm"),
             stopForm: document.getElementById("stopForm"),
             deleteForm: document.getElementById("deleteForm"),
+            selectedServerStatus: document.getElementById("selectedServerStatus"),
+            selectedServerPort: document.getElementById("selectedServerPort"),
+            selectedServerSize: document.getElementById("selectedServerSize"),
+            selectedServerSource: document.getElementById("selectedServerSource"),
             runningBadge: document.getElementById("runningBadge"),
             serverCount: document.getElementById("serverCount"),
             serverList: document.getElementById("serverList"),
+            serverTable: document.getElementById("serverTable"),
             consoleOutput: document.getElementById("consoleOutput"),
             consoleState: document.getElementById("consoleState"),
             commandForm: document.getElementById("commandForm"),
@@ -38,8 +49,10 @@
             sceneDetail: document.getElementById("sceneDetail")
         };
 
+        state.page = currentPageFromHash();
         state.server = elements.serverSelect && elements.serverSelect.value ? elements.serverSelect.value : "";
         bindEvents();
+        showPage(state.page, false);
         initScene();
         animateIn();
         refreshStatus();
@@ -50,6 +63,14 @@
     });
 
     function bindEvents() {
+        elements.navItems.forEach(function (item) {
+            item.addEventListener("click", function () {
+                showPage(item.getAttribute("data-page"), true);
+            });
+        });
+        window.addEventListener("hashchange", function () {
+            showPage(currentPageFromHash(), false);
+        });
         if (elements.serverSelect) {
             elements.serverSelect.addEventListener("change", function () {
                 selectServer(elements.serverSelect.value);
@@ -80,9 +101,52 @@
             elements.serverSelect.value = state.server;
         }
         updateActionForms();
+        renderSelectedServer();
         refreshConsole();
         refreshFiles();
         renderServers();
+        renderServerTable();
+    }
+
+    function currentPageFromHash() {
+        var page = (window.location.hash || "#overview").replace("#", "");
+        return pageNames()[page] ? page : "overview";
+    }
+
+    function pageNames() {
+        return {
+            overview: { title: "Overview", kicker: "Operations" },
+            servers: { title: "Servers", kicker: "Provisioning" },
+            console: { title: "Console", kicker: "Runtime" },
+            files: { title: "Files", kicker: "Explorer" },
+            settings: { title: "Settings", kicker: "Workspace" }
+        };
+    }
+
+    function showPage(page, updateHash) {
+        var pages = pageNames();
+        state.page = pages[page] ? page : "overview";
+        if (updateHash && window.location.hash !== "#" + state.page) {
+            window.location.hash = state.page;
+        }
+        elements.navItems.forEach(function (item) {
+            item.classList.toggle("active", item.getAttribute("data-page") === state.page);
+        });
+        elements.pageViews.forEach(function (view) {
+            view.classList.toggle("active", view.getAttribute("data-page-view") === state.page);
+        });
+        if (elements.pageTitle) {
+            elements.pageTitle.textContent = pages[state.page].title;
+        }
+        if (elements.pageKicker) {
+            elements.pageKicker.textContent = pages[state.page].kicker;
+        }
+        if (state.page === "overview") {
+            window.setTimeout(resizeScene, 80);
+        }
+        if (window.gsap) {
+            gsap.fromTo("[data-page-view='" + state.page + "'] > *", { y: 10, opacity: .88 }, { y: 0, opacity: 1, duration: .28, stagger: .025, ease: "power2.out" });
+        }
     }
 
     function updateActionForms() {
@@ -112,6 +176,8 @@
                 renderMetrics(data);
                 renderServerOptions();
                 renderServers();
+                renderServerTable();
+                renderSelectedServer();
                 updateActionForms();
                 updateScene(data);
             })
@@ -129,6 +195,7 @@
         setMetric("systemCpuLoad", "system " + percent(data.systemCpuLoad));
         setMetric("dataSize", data.dataSize || "0 B");
         setMetric("diskFree", "free " + (data.diskFree || "0 B"));
+        setMetric("maxServers", data.maxServers || 0);
         if (elements.runningBadge) {
             elements.runningBadge.textContent = (data.runningServers || 0) + " / " + (data.maxServers || 0) + " running";
         }
@@ -144,10 +211,10 @@
     }
 
     function setMetric(name, value) {
-        var node = document.querySelector("[data-metric='" + name + "']");
-        if (node) {
+        var nodes = document.querySelectorAll("[data-metric='" + name + "']");
+        nodes.forEach(function (node) {
             node.textContent = value;
-        }
+        });
     }
 
     function renderServerOptions() {
@@ -167,6 +234,33 @@
         } else if (state.servers.length > 0) {
             state.server = state.servers[0].name;
             elements.serverSelect.value = state.server;
+        }
+    }
+
+    function selectedServer() {
+        return state.servers.find(function (server) {
+            return server.name === state.server;
+        }) || null;
+    }
+
+    function renderSelectedServer() {
+        var server = selectedServer();
+        if (elements.activeServerBadge) {
+            elements.activeServerBadge.textContent = server ? server.name + " :" + server.port : "No server";
+            elements.activeServerBadge.className = server && server.status === "RUNNING" ? "pill online" : "pill muted";
+        }
+        if (elements.selectedServerStatus) {
+            elements.selectedServerStatus.className = "pill " + statusClass(server ? server.status : "UNKNOWN");
+            elements.selectedServerStatus.textContent = server ? server.status : "UNKNOWN";
+        }
+        if (elements.selectedServerPort) {
+            elements.selectedServerPort.textContent = server ? ":" + server.port : "-";
+        }
+        if (elements.selectedServerSize) {
+            elements.selectedServerSize.textContent = server ? server.size : "-";
+        }
+        if (elements.selectedServerSource) {
+            elements.selectedServerSource.textContent = server && server.source ? server.source : "-";
         }
     }
 
@@ -191,6 +285,32 @@
                 selectServer(server.name);
             });
             elements.serverList.appendChild(row);
+        });
+    }
+
+    function renderServerTable() {
+        if (!elements.serverTable) {
+            return;
+        }
+        elements.serverTable.innerHTML = "";
+        if (state.servers.length === 0) {
+            elements.serverTable.appendChild(emptyRow("No servers"));
+            return;
+        }
+        state.servers.forEach(function (server) {
+            var row = document.createElement("button");
+            row.type = "button";
+            row.className = "data-row" + (server.name === state.server ? " active" : "");
+            row.innerHTML = [
+                "<span class='row-title'><span>" + escapeHtml(server.name) + "</span>" + statusPill(server.status) + "</span>",
+                "<span class='row-meta'>:" + escapeHtml(String(server.port)) + "</span>",
+                "<span class='row-meta'>" + escapeHtml(server.size || "0 B") + "</span>",
+                "<span class='row-meta'>" + escapeHtml(server.source || "unknown") + "</span>"
+            ].join("");
+            row.addEventListener("click", function () {
+                selectServer(server.name);
+            });
+            elements.serverTable.appendChild(row);
         });
     }
 
@@ -581,7 +701,7 @@
         if (!window.gsap) {
             return;
         }
-        gsap.from(".command-strip, .scene-panel, .metric-card, .workbench > article", {
+        gsap.from(".sidebar, .page-topbar, .page-view.active > *", {
             y: 14,
             opacity: 0,
             duration: .55,
@@ -617,8 +737,12 @@
     }
 
     function statusPill(status) {
-        var cls = status === "RUNNING" ? "online" : (status === "STARTING" ? "warning" : "muted");
+        var cls = statusClass(status);
         return "<span class='pill " + cls + "'>" + escapeHtml(status || "UNKNOWN") + "</span>";
+    }
+
+    function statusClass(status) {
+        return status === "RUNNING" ? "online" : (status === "STARTING" ? "warning" : "muted");
     }
 
     function emptyRow(text) {
