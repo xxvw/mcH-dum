@@ -29,7 +29,18 @@ public class Utils {
 
     public static void delete(String path) {
         File filePath = new File(path);
+        if (!filePath.exists()) {
+            return;
+        }
+        if (filePath.isFile()) {
+            filePath.delete();
+            return;
+        }
         String[] list = filePath.list();
+        if (list == null) {
+            filePath.delete();
+            return;
+        }
         for(String file : list) {
             File f = new File(path + File.separator + file);
             if(f.isDirectory()) {

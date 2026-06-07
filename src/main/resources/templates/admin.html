@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>McHost Admin</title>
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+<body>
+<header class="topbar">
+    <div>
+        <h1>McHost Admin</h1>
+        <p th:text="${publicIp}">127.0.0.1</p>
+    </div>
+    <div class="statusbar">
+        <span th:text="${runningCount + ' / ' + maxServers + ' running'}">0 / 50 running</span>
+        <span th:class="${discordEnabled} ? 'pill online' : 'pill muted'"
+              th:text="${discordEnabled} ? 'Discord online' : 'Web only'">Web only</span>
+    </div>
+</header>
+
+<main>
+    <section class="panel">
+        <form class="create-form" method="post" th:action="@{/admin/servers}">
+            <label>
+                <span>Server name</span>
+                <input name="name" maxlength="64" pattern="[0-9A-Za-z_-]{1,64}" required>
+            </label>
+            <label class="check">
+                <input type="checkbox" name="start" value="true">
+                <span>Start now</span>
+            </label>
+            <button type="submit">Create</button>
+        </form>
+    </section>
+
+    <p class="notice success" th:if="${message}" th:text="${message}"></p>
+    <p class="notice error" th:if="${error}" th:text="${error}"></p>
+
+    <section class="server-grid">
+        <article class="server-card" th:each="server : ${servers}">
+            <div class="server-head">
+                <div>
+                    <h2 th:text="${server.name}">server</h2>
+                    <p th:text="${publicIp + ':' + server.port}">127.0.0.1:25000</p>
+                </div>
+                <span th:class="${server.status.name() == 'RUNNING'} ? 'pill online' : 'pill muted'"
+                      th:text="${server.status}">STOPPED</span>
+            </div>
+
+            <dl>
+                <div>
+                    <dt>Source</dt>
+                    <dd th:text="${server.source ?: 'unknown'}">web</dd>
+                </div>
+                <div>
+                    <dt>Last start</dt>
+                    <dd th:text="${server.lastStartedAt ?: '-'}">-</dd>
+                </div>
+                <div>
+                    <dt>Last stop</dt>
+                    <dd th:text="${server.lastStoppedAt ?: '-'}">-</dd>
+                </div>
+            </dl>
+
+            <div class="actions">
+                <form method="post" th:action="@{/admin/servers/{name}/start(name=${server.name})}">
+                    <button type="submit" th:disabled="${server.status.name() == 'RUNNING'}">Start</button>
+                </form>
+                <form method="post" th:action="@{/admin/servers/{name}/stop(name=${server.name})}">
+                    <button type="submit" th:disabled="${server.status.name() != 'RUNNING'}">Stop</button>
+                </form>
+                <form method="post" th:action="@{/admin/servers/{name}/delete(name=${server.name})}">
+                    <button type="submit" class="danger">Delete</button>
+                </form>
+            </div>
+
+            <form class="command-form" method="post" th:action="@{/admin/servers/{name}/command(name=${server.name})}">
+                <input name="command" placeholder="say hello" th:disabled="${server.status.name() != 'RUNNING'}">
+                <button type="submit" th:disabled="${server.status.name() != 'RUNNING'}">Send</button>
+            </form>
+        </article>
+    </section>
+</main>
+</body>
+</html>

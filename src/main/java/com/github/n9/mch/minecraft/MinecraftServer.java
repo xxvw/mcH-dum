@@ -4,165 +4,185 @@ import com.github.n9.mch.McHostApplication;
 import com.github.n9.mch.Utils;
 import net.dv8tion.jda.api.entities.TextChannel;
 
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.CopyOption;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 public class MinecraftServer {
 
-    TextChannel channel;
-    String name;
+    private final Consumer<String> notifier;
+    private final Runnable stoppedCallback;
+    private final File datadir;
+    private final String[] command;
+
+    public final String name;
+    public final int port;
     public Process process;
-    Thread thread;
-    int port;
-    File datadir = new File(System.getProperty("user.dir") + File.separator + "data");
-    public File userdir;
-    String[] command;
+    private Thread thread;
+    public final File userdir;
 
     public MinecraftServer(String name, TextChannel channel, int port, String... command) {
+        this(name, port, new File(System.getProperty("user.dir"), "data"), message -> {
+            if (channel != null) {
+                channel.sendMessage(message).queue();
+            }
+        }, () -> {
+        }, command);
+    }
+
+    public MinecraftServer(String name, int port, File datadir, Consumer<String> notifier, Runnable stoppedCallback, String... command) {
         this.port = port;
         this.name = name;
-        this.channel = channel;
-
+        this.notifier = notifier == null ? message -> {
+        } : notifier;
+        this.stoppedCallback = stoppedCallback == null ? () -> {
+        } : stoppedCallback;
+        this.datadir = datadir;
         this.command = command;
-
         this.userdir = new File(datadir, name);
         if (!this.userdir.exists()) {
             this.userdir.mkdirs();
         }
-
-        this.process = null;
     }
 
-    public static File genUserDir(String name){
-        return new File(new File(System.getProperty("user.dir") + File.separator + "data"), name);
+    public static File genUserDir(String name) {
+        return new File(new File(System.getProperty("user.dir"), "data"), name);
     }
 
     public boolean isAlive() {
-        if (process == null) return false;
-        if (!process.isAlive()) return false;
-        if (!thread.isAlive()) return false;
-        return true;
+        return process != null && process.isAlive() && thread != null && thread.isAlive();
     }
 
-    public MinecraftError start() {
-        if (isAlive()) return MinecraftError.STARTING;
+    public synchronized MinecraftError start() {
+        if (isAlive()) {
+            return MinecraftError.STARTING;
+        }
+
         try {
             first();
         } catch (IOException e) {
             e.printStackTrace();
+            return MinecraftError.PROCESS_ERROR;
         }
 
-        thread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                ProcessBuilder builder = new ProcessBuilder();
-                if(Utils.getOS() == Utils.OS.WINDOWS) {
-                    StringBuffer buffer = new StringBuffer();
-                    buffer.append("cmd,/c,");
-                    for(String str : command) {
-                        if(str.equals("java")) {
-                            buffer.append("C:\\Users\\user\\.jdks\\corretto-16.0.2\\bin\\java,");
-                        } else
-                            buffer.append(str + ",");
-                    }
-                    builder.command(buffer.toString().split(","));
-                    System.out.println("cmd: " + Arrays.toString(buffer.toString().split(",")));
-                } else {
-                    builder.command(command);
-                    System.out.println(Arrays.toString(command));
-                }
-                builder.directory(userdir);
-                //builder.destroyOnExit();
-                try {
-                    process = builder.start();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                System.out.println("StartServer " + name + " p:" + port);
-                channel.sendMessage("サーバーが起動しました。\nIP: " + McHostApplication.IP + ":" + port).complete();
-                try {
-                    process.waitFor();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                process.destroy();
-                System.out.println("End Process " + name + "#" + process.pid());
-                channel.sendMessage("サーバーが停止しました。").complete();
-                //TODO: send server close message
+        thread = new Thread(() -> {
+            ProcessBuilder builder = new ProcessBuilder();
+            if (Utils.getOS() == Utils.OS.WINDOWS) {
+                builder.command(windowsCommand());
+            } else {
+                builder.command(command);
             }
-        });
+            builder.directory(userdir);
+
+            try {
+                process = builder.start();
+                System.out.println("StartServer " + name + " p:" + port);
+                notifier.accept("サーバーが起動しました。\nIP: " + McHostApplication.IP + ":" + port);
+                process.waitFor();
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+                if (Thread.currentThread().isInterrupted()) {
+                    Thread.currentThread().interrupt();
+                }
+            } finally {
+                if (process != null) {
+                    process.destroy();
+                }
+                System.out.println("End Process " + name);
+                notifier.accept("サーバーが停止しました。");
+                stoppedCallback.run();
+            }
+        }, "minecraft-" + name);
         thread.start();
         return null;
     }
 
+    private List<String> windowsCommand() {
+        String[] windows = Arrays.copyOf(command, command.length);
+        for (int i = 0; i < windows.length; i++) {
+            if ("java".equals(windows[i])) {
+                windows[i] = "java";
+            }
+        }
+        return Arrays.asList(windows);
+    }
+
     private void first() throws IOException {
-        if(new File(userdir.getPath() + File.separator + "logs").exists())
-            Utils.delete(userdir.getPath() + File.separator + "logs");
-        if(new File(userdir.getPath() + File.separator + "cache").exists())
-            Utils.delete(userdir.getPath() + File.separator + "cache");
-        if(new File(userdir.getPath() + File.separator + "server.jar").exists())
-            new File(userdir.getPath() + File.separator + "server.jar").delete();
-        if(new File(userdir.getPath() + File.separator + "server.properties").exists())
-            new File(userdir.getPath() + File.separator + "server.properties").delete();
-        if(new File(userdir.getPath() + File.separator + "plugins").exists())
-            Utils.delete(userdir.getPath() + File.separator + "plugins");
-        List<String> files = new ArrayList<>();
-        for (File f : userdir.listFiles()) {
-            files.add(f.getName());
-        }
+        deleteIfExists(new File(userdir, "logs"));
+        deleteIfExists(new File(userdir, "cache"));
+        deleteIfExists(new File(userdir, "server.jar"));
+        deleteIfExists(new File(userdir, "server.properties"));
+        deleteIfExists(new File(userdir, "plugins"));
 
-        try {
-            File serverJar = new File(System.getProperty("user.dir") + File.separator + "data" + File.separator + "base", "server.jar");
-            File targetJar = new File(userdir.getPath() + File.separator + "server.jar");
-            Files.copy(serverJar.toPath(), targetJar.toPath());
-        } catch (FileAlreadyExistsException ex ){
-            // null
-        }
+        File base = new File(datadir, "base");
+        copyFileIfExists(new File(base, "server.jar"), new File(userdir, "server.jar"));
+        copyDirectoryIfExists(new File(base, "cache"), new File(userdir, "cache"));
+        copyDirectoryIfExists(new File(base, "plugins"), new File(userdir, "plugins"));
 
-        try {
-            File cacheF = new File(System.getProperty("user.dir") + File.separator + "data" + File.separator + "base", "cache");
-            File cacheF2 = new File(userdir.getPath() + File.separator + "cache");
-            Files.copy(cacheF.toPath(), cacheF2.toPath());
-            cacheF2.mkdirs();
-            for(File f : cacheF2.listFiles()) {
-                Files.copy(f.toPath(), new File(cacheF2 + File.separator + f.getName()).toPath());
+        File eula = new File(userdir, "eula.txt");
+        if (!eula.exists()) {
+            try (PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(eula)))) {
+                pw.println("eula=true");
             }
-        } catch (FileAlreadyExistsException ex ){
-            // null
-        }
-
-        try {
-            File plugin = new File(System.getProperty("user.dir") + File.separator + "data" + File.separator + "base", "plugins");
-            File plugin2 = new File(userdir.getPath() + File.separator + "plugins");
-            plugin2.mkdirs();
-            for(File f : plugin.listFiles()) {
-                Files.copy(f.toPath(), new File(plugin2 + File.separator + f.getName()).toPath());
-            }
-        } catch (FileAlreadyExistsException ex ){
-            // null
-        }
-
-
-        if (!files.contains("eula.txt")) {
-            File eula = new File(userdir, "eula.txt");
-            eula.createNewFile();
-            FileWriter file = new FileWriter(eula);
-            PrintWriter pw = new PrintWriter(new BufferedWriter(file));
-            pw.println("eula=true");
-            pw.flush();
-            pw.close();
         }
 
         File properties = new File(userdir, "server.properties");
-        properties.createNewFile();
-        PrintWriter pw = new PrintWriter(new BufferedWriter(new OutputStreamWriter(new FileOutputStream(properties), StandardCharsets.UTF_8)));
-        List<String> elements = List.of(
+        try (PrintWriter pw = new PrintWriter(new BufferedWriter(new OutputStreamWriter(new FileOutputStream(properties), StandardCharsets.UTF_8)))) {
+            for (String s : serverProperties()) {
+                pw.println(s);
+            }
+        }
+    }
+
+    private void deleteIfExists(File file) {
+        if (file.exists()) {
+            Utils.delete(file.getPath());
+        }
+    }
+
+    private void copyFileIfExists(File source, File target) throws IOException {
+        if (source.exists()) {
+            try {
+                Files.copy(source.toPath(), target.toPath());
+            } catch (FileAlreadyExistsException ignored) {
+            }
+        }
+    }
+
+    private void copyDirectoryIfExists(File source, File target) throws IOException {
+        if (!source.exists()) {
+            return;
+        }
+        try (Stream<java.nio.file.Path> paths = Files.walk(source.toPath())) {
+            paths.forEach(path -> {
+                try {
+                    File dest = target.toPath().resolve(source.toPath().relativize(path)).toFile();
+                    if (path.toFile().isDirectory()) {
+                        dest.mkdirs();
+                    } else {
+                        Files.copy(path, dest.toPath());
+                    }
+                } catch (FileAlreadyExistsException ignored) {
+                } catch (IOException e) {
+                    throw new IllegalStateException(e);
+                }
+            });
+        }
+    }
+
+    private List<String> serverProperties() {
+        return List.of(
                 "spawn-protection=16",
                 "max-tick-time=60000",
                 "query.port=" + port,
@@ -213,28 +233,25 @@ public class MinecraftServer {
                 "enable-rcon=false",
                 "motd=A Minecraft Server"
         );
-
-        for(String s : elements) {
-            pw.println(s);
-            pw.flush();
-        }
-        pw.close();
     }
 
     public MinecraftError stop() {
-        if (!isAlive()) return MinecraftError.NOT_FOUND;
-        command("save-all","stop");
+        if (!isAlive()) {
+            return MinecraftError.NOT_FOUND;
+        }
+        command("save-all", "stop");
         return null;
     }
 
     public void command(String... commands) {
-        if(!isAlive()) return;
+        if (!isAlive()) {
+            return;
+        }
         PrintWriter out = new PrintWriter(process.getOutputStream());
-        for(String cmd : commands) {
+        for (String cmd : commands) {
             out.print(cmd);
-            out.print(System.getProperty("line.separator"));
+            out.print(System.lineSeparator());
             out.flush();
         }
     }
-
 }

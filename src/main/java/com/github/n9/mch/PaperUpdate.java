@@ -1,7 +1,5 @@
 package com.github.n9.mch;
 
-import lombok.SneakyThrows;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -15,9 +13,18 @@ import java.util.Map;
 
 public class PaperUpdate {
 
-    @SneakyThrows
+    private static final String PAPER_API = "https://api.papermc.io/v2/projects/paper";
+
     public static void run() {
-        URL url = new URL("https://papermc.io/api/v2/projects/paper");
+        try {
+            run(new File(System.getProperty("user.dir"), "data"));
+        } catch (IOException | InterruptedException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public static void run(File dataDir) throws IOException, InterruptedException {
+        URL url = new URL(PAPER_API);
         HttpURLConnection http = (HttpURLConnection) url.openConnection();
         http.setRequestMethod("GET");
         http.connect();
@@ -29,7 +36,7 @@ public class PaperUpdate {
         Map<String, Object> obj = Utils.jsonStringToMap(xml);
         ArrayList<String> vers = (ArrayList<String>) obj.get("versions");
         String latest = vers.get(vers.size() - 1);
-        url = new URL("https://papermc.io/api/v2/projects/paper/versions/" + latest);
+        url = new URL(PAPER_API + "/versions/" + latest);
         http = (HttpURLConnection) url.openConnection();
         http.setRequestMethod("GET");
         http.connect();
@@ -41,7 +48,7 @@ public class PaperUpdate {
         reader.close();
         obj = Utils.jsonStringToMap(xml);
         int build = ((List<Integer>) obj.get("builds")).get(((List<Integer>) obj.get("builds")).size() - 1);
-        url = new URL("https://papermc.io/api/v2/projects/paper/versions/" + latest + "/builds/" + build);
+        url = new URL(PAPER_API + "/versions/" + latest + "/builds/" + build);
         http = (HttpURLConnection) url.openConnection();
         http.setRequestMethod("GET");
         http.connect();
@@ -53,9 +60,9 @@ public class PaperUpdate {
         reader.close();
         obj = Utils.jsonStringToMap(xml);
         String jarName = ((String) ((LinkedHashMap<String, Object>) ((LinkedHashMap<String, Object>) obj.get("downloads")).get("application")).get("name"));
-        String command = "https://papermc.io/api/v2/projects/paper/versions/" + latest + "/builds/" + build + "/downloads/" + jarName;
+        String command = PAPER_API + "/versions/" + latest + "/builds/" + build + "/downloads/" + jarName;
         ProcessBuilder builder = new ProcessBuilder();
-        File f = new File(System.getProperty("user.dir") + File.separator + "data" + File.separator + "base");
+        File f = new File(dataDir, "base");
         f.mkdirs();
         builder.directory(f);
         builder.command("curl", command, "-o", "server.jar");
