@@ -1,8 +1,8 @@
 package com.github.n9.mch.event.command;
 
 import com.github.n9.mch.ConsoleLogger;
+import com.github.n9.mch.McHostApplication;
 import com.github.n9.mch.Utils;
-import com.github.n9.mch.minecraft.MinecraftServer;
 import net.dv8tion.jda.api.entities.PermissionOverride;
 import net.dv8tion.jda.api.events.message.guild.GuildMessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -31,9 +31,10 @@ public class leaveCommand extends ListenerAdapter {
                     event.getChannel().sendMessage("<@" + event.getAuthor().getIdLong() + "> がメンバーから脱退しました。").complete();
                     Objects.requireNonNull(event.getChannel().getPermissionOverride(Objects.requireNonNull(event.getMember()))).delete().complete();
                     if (event.getChannel().getTopic().equals(event.getAuthor().getId())) {
-                        File userdir = MinecraftServer.genUserDir(event.getChannel().getName());
+                        File userdir = McHostApplication.manager.getUserdir(event.getChannel().getName());
                         if (userdir.exists()) Utils.delete(userdir.getPath());
                         if (userdir.exists()) ConsoleLogger.info("Delete userdir" + userdir.getPath());
+                        McHostApplication.manager.deleteServer(event.getChannel().getName());
                         for (PermissionOverride pov : event.getChannel().getMemberPermissionOverrides()) {
                             try {
                                 Utils.sendMessage(pov.getMember().getUser(), event.getChannel() + "が" + event.getMember().getUser().getAsTag() + "によって削除されました。");

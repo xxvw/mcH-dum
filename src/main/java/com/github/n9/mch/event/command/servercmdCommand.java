@@ -20,8 +20,7 @@ public class servercmdCommand extends ListenerAdapter {
                 if (cmd.isEmpty() || cmd.isBlank()) {
                     event.getChannel().sendMessage("cmd [commands...]").complete();
                     return;
-                } else if (McHostApplication.manager.isFound(event.getChannel().getName())) {
-                    McHostApplication.manager.getServer(event.getChannel().getName()).command(cmd);
+                } else if (McHostApplication.manager.commandServer(event.getChannel().getName(), cmd) == null) {
                     event.getChannel().sendMessage("コマンドを送信しました。").complete();
                 } else {
                     event.getChannel().sendMessage("サーバーが見つかりませんでした。").complete();

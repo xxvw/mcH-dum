@@ -1,7 +1,7 @@
 package com.github.n9.mch.event.command;
 
+import com.github.n9.mch.McHostApplication;
 import com.github.n9.mch.Utils;
-import com.github.n9.mch.minecraft.MinecraftServer;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Category;
 import net.dv8tion.jda.api.entities.Message;
@@ -99,7 +99,8 @@ public class registerCommand extends ListenerAdapter {
                             "サーバーを一つにまとめている機構のため、毎回IPが変更されます。\n" +
                             "「サーバーを追加」ではなく「直接接続」をおすすめします。\n" +
                             "3分間誰もサーバーにログインしていない場合サーバーは自動で停止します。").complete();
-                    File userdir = MinecraftServer.genUserDir(ch.getName());
+                    McHostApplication.manager.createServer(ch.getName(), "discord", event.getAuthor().getId(), ch.getId());
+                    File userdir = McHostApplication.manager.getUserdir(ch.getName());
                     userdir.mkdir();
                     msg.pin().complete();
                 }

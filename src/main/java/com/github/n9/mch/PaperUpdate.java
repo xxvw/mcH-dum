@@ -1,7 +1,5 @@
 package com.github.n9.mch;
 
-import lombok.SneakyThrows;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -15,8 +13,15 @@ import java.util.Map;
 
 public class PaperUpdate {
 
-    @SneakyThrows
     public static void run() {
+        try {
+            run(new File(System.getProperty("user.dir"), "data"));
+        } catch (IOException | InterruptedException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public static void run(File dataDir) throws IOException, InterruptedException {
         URL url = new URL("https://papermc.io/api/v2/projects/paper");
         HttpURLConnection http = (HttpURLConnection) url.openConnection();
         http.setRequestMethod("GET");
@@ -55,7 +60,7 @@ public class PaperUpdate {
         String jarName = ((String) ((LinkedHashMap<String, Object>) ((LinkedHashMap<String, Object>) obj.get("downloads")).get("application")).get("name"));
         String command = "https://papermc.io/api/v2/projects/paper/versions/" + latest + "/builds/" + build + "/downloads/" + jarName;
         ProcessBuilder builder = new ProcessBuilder();
-        File f = new File(System.getProperty("user.dir") + File.separator + "data" + File.separator + "base");
+        File f = new File(dataDir, "base");
         f.mkdirs();
         builder.directory(f);
         builder.command("curl", command, "-o", "server.jar");
