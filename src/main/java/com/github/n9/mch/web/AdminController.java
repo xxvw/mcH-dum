@@ -32,7 +32,7 @@ public class AdminController {
     public String index(Model model) {
         model.addAttribute("servers", serverManager.listServers());
         model.addAttribute("runningCount", serverManager.getAll().size());
-        model.addAttribute("maxServers", serverManager.max);
+        model.addAttribute("maxServers", serverManager.getMaxServers());
         model.addAttribute("publicIp", McHostApplication.IP);
         model.addAttribute("discordEnabled", properties.getDiscord().getToken() != null && !properties.getDiscord().getToken().isBlank());
         return "admin";

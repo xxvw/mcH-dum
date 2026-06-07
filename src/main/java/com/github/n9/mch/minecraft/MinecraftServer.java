@@ -14,8 +14,13 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -25,6 +30,8 @@ public class MinecraftServer {
     private final Runnable stoppedCallback;
     private final File datadir;
     private final String[] command;
+    private final Queue<String> consoleLines = new ArrayDeque<>();
+    private final Object consoleLock = new Object();
 
     public final String name;
     public final int port;
@@ -64,6 +71,12 @@ public class MinecraftServer {
         return process != null && process.isAlive() && thread != null && thread.isAlive();
     }
 
+    public List<String> getConsoleLines() {
+        synchronized (consoleLock) {
+            return new ArrayList<>(consoleLines);
+        }
+    }
+
     public synchronized MinecraftError start() {
         if (isAlive()) {
             return MinecraftError.STARTING;
@@ -88,10 +101,14 @@ public class MinecraftServer {
             try {
                 process = builder.start();
                 System.out.println("StartServer " + name + " p:" + port);
+                appendConsole("system", "StartServer " + name + " p:" + port);
+                startConsolePump(process.getInputStream(), "stdout");
+                startConsolePump(process.getErrorStream(), "stderr");
                 notifier.accept("サーバーが起動しました。\nIP: " + McHostApplication.IP + ":" + port);
                 process.waitFor();
             } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
+                appendConsole("system", e.getMessage() == null ? e.toString() : e.getMessage());
                 if (Thread.currentThread().isInterrupted()) {
                     Thread.currentThread().interrupt();
                 }
@@ -100,12 +117,38 @@ public class MinecraftServer {
                     process.destroy();
                 }
                 System.out.println("End Process " + name);
+                appendConsole("system", "End Process " + name);
                 notifier.accept("サーバーが停止しました。");
                 stoppedCallback.run();
             }
         }, "minecraft-" + name);
         thread.start();
         return null;
+    }
+
+    private void startConsolePump(java.io.InputStream inputStream, String source) {
+        Thread pump = new Thread(() -> {
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    appendConsole(source, line);
+                }
+            } catch (IOException e) {
+                appendConsole(source, e.getMessage() == null ? e.toString() : e.getMessage());
+            }
+        }, "minecraft-" + name + "-" + source);
+        pump.setDaemon(true);
+        pump.start();
+    }
+
+    private void appendConsole(String source, String message) {
+        String timestamp = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+        synchronized (consoleLock) {
+            consoleLines.add("[" + timestamp + "] [" + source + "] " + message);
+            while (consoleLines.size() > 500) {
+                consoleLines.poll();
+            }
+        }
     }
 
     private List<String> windowsCommand() {
@@ -249,6 +292,7 @@ public class MinecraftServer {
         }
         PrintWriter out = new PrintWriter(process.getOutputStream());
         for (String cmd : commands) {
+            appendConsole("input", cmd);
             out.print(cmd);
             out.print(System.lineSeparator());
             out.flush();
