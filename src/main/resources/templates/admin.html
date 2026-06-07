@@ -4,23 +4,34 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>McHost Admin</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" th:href="@{/css/admin.css}">
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+    <script th:src="@{/js/admin-dashboard.js}" defer></script>
 </head>
 <body>
 <header class="topbar">
-    <div>
-        <h1>McHost Admin</h1>
-        <p th:text="${publicIp}">127.0.0.1</p>
+    <div class="brand">
+        <span class="brand-mark">MC</span>
+        <div>
+            <h1>McHost Admin</h1>
+            <p id="publicIp" th:text="${publicIp}">127.0.0.1</p>
+        </div>
     </div>
-    <div class="statusbar">
-        <span th:text="${runningCount + ' / ' + maxServers + ' running'}">0 / 50 running</span>
+    <div class="top-actions">
+        <span id="runningBadge" class="pill online" th:text="${runningCount + ' / ' + maxServers + ' running'}">0 / 50 running</span>
         <span th:class="${discordEnabled} ? 'pill online' : 'pill muted'"
               th:text="${discordEnabled} ? 'Discord online' : 'Web only'">Web only</span>
     </div>
 </header>
 
-<main>
-    <section class="panel">
+<main class="shell">
+    <p class="notice success" th:if="${message}" th:text="${message}"></p>
+    <p class="notice error" th:if="${error}" th:text="${error}"></p>
+    <p id="toast" class="notice" hidden></p>
+
+    <section class="command-strip">
         <form class="create-form" method="post" th:action="@{/admin/servers}">
             <label>
                 <span>Server name</span>
@@ -32,53 +43,108 @@
             </label>
             <button type="submit">Create</button>
         </form>
-    </section>
 
-    <p class="notice success" th:if="${message}" th:text="${message}"></p>
-    <p class="notice error" th:if="${error}" th:text="${error}"></p>
-
-    <section class="server-grid">
-        <article class="server-card" th:each="server : ${servers}">
-            <div class="server-head">
-                <div>
-                    <h2 th:text="${server.name}">server</h2>
-                    <p th:text="${publicIp + ':' + server.port}">127.0.0.1:25000</p>
-                </div>
-                <span th:class="${server.status.name() == 'RUNNING'} ? 'pill online' : 'pill muted'"
-                      th:text="${server.status}">STOPPED</span>
-            </div>
-
-            <dl>
-                <div>
-                    <dt>Source</dt>
-                    <dd th:text="${server.source ?: 'unknown'}">web</dd>
-                </div>
-                <div>
-                    <dt>Last start</dt>
-                    <dd th:text="${server.lastStartedAt ?: '-'}">-</dd>
-                </div>
-                <div>
-                    <dt>Last stop</dt>
-                    <dd th:text="${server.lastStoppedAt ?: '-'}">-</dd>
-                </div>
-            </dl>
-
-            <div class="actions">
-                <form method="post" th:action="@{/admin/servers/{name}/start(name=${server.name})}">
-                    <button type="submit" th:disabled="${server.status.name() == 'RUNNING'}">Start</button>
+        <div class="server-picker">
+            <label>
+                <span>Active server</span>
+                <select id="serverSelect">
+                    <option th:each="server : ${servers}"
+                            th:value="${server.name}"
+                            th:text="${server.name + ' :' + server.port}">server :25000</option>
+                </select>
+            </label>
+            <div class="server-actions">
+                <form id="startForm" method="post">
+                    <button type="submit">Start</button>
                 </form>
-                <form method="post" th:action="@{/admin/servers/{name}/stop(name=${server.name})}">
-                    <button type="submit" th:disabled="${server.status.name() != 'RUNNING'}">Stop</button>
+                <form id="stopForm" method="post">
+                    <button type="submit">Stop</button>
                 </form>
-                <form method="post" th:action="@{/admin/servers/{name}/delete(name=${server.name})}">
+                <form id="deleteForm" method="post">
                     <button type="submit" class="danger">Delete</button>
                 </form>
             </div>
+        </div>
+    </section>
 
-            <form class="command-form" method="post" th:action="@{/admin/servers/{name}/command(name=${server.name})}">
-                <input name="command" placeholder="say hello" th:disabled="${server.status.name() != 'RUNNING'}">
-                <button type="submit" th:disabled="${server.status.name() != 'RUNNING'}">Send</button>
+    <section class="overview">
+        <article class="scene-panel">
+            <canvas id="serverScene" aria-label="Server status visualization"></canvas>
+            <div class="scene-copy">
+                <span class="eyebrow">Cluster</span>
+                <strong id="sceneTitle">0 servers</strong>
+                <span id="sceneDetail">CPU 0% / Memory 0 B</span>
+            </div>
+        </article>
+
+        <div class="metric-grid">
+            <article class="metric-card">
+                <span>Total</span>
+                <strong data-metric="totalServers">0</strong>
+                <small data-metric="runningServers">0 running</small>
+            </article>
+            <article class="metric-card">
+                <span>Memory</span>
+                <strong data-metric="usedMemory">0 B</strong>
+                <small data-metric="maxMemory">max 0 B</small>
+            </article>
+            <article class="metric-card">
+                <span>CPU</span>
+                <strong data-metric="processCpuLoad">0%</strong>
+                <small data-metric="systemCpuLoad">system 0%</small>
+            </article>
+            <article class="metric-card">
+                <span>Files</span>
+                <strong data-metric="dataSize">0 B</strong>
+                <small data-metric="diskFree">free 0 B</small>
+            </article>
+        </div>
+    </section>
+
+    <section class="workbench">
+        <article class="server-list-panel">
+            <div class="panel-head">
+                <h2>Servers</h2>
+                <span id="serverCount" class="muted">0</span>
+            </div>
+            <div id="serverList" class="server-list"></div>
+        </article>
+
+        <article class="console-panel">
+            <div class="panel-head">
+                <h2>Console</h2>
+                <span id="consoleState" class="muted">Idle</span>
+            </div>
+            <pre id="consoleOutput" class="console-output"></pre>
+            <form id="commandForm" class="command-form">
+                <input id="commandInput" name="command" placeholder="say hello">
+                <button type="submit">Send</button>
             </form>
+        </article>
+
+        <article class="files-panel">
+            <div class="panel-head">
+                <h2>Files</h2>
+                <button id="upButton" type="button" class="secondary">Up</button>
+            </div>
+            <div id="breadcrumb" class="breadcrumb">/</div>
+            <div id="fileList" class="file-list"></div>
+            <form id="uploadForm" class="upload-form">
+                <input id="uploadInput" type="file" name="file">
+                <button type="submit">Upload</button>
+            </form>
+        </article>
+
+        <article class="editor-panel">
+            <div class="panel-head">
+                <h2>Editor</h2>
+                <span id="selectedFile" class="muted">No file</span>
+            </div>
+            <textarea id="fileEditor" spellcheck="false"></textarea>
+            <div class="editor-actions">
+                <button id="saveFileButton" type="button">Save</button>
+                <button id="deleteFileButton" type="button" class="danger">Delete</button>
+            </div>
         </article>
     </section>
 </main>

@@ -91,7 +91,7 @@ public class ServerManager {
     @Transactional
     public MinecraftError startServer(String name, TextChannel channel) {
         cleanupStoppedProcesses();
-        if (runningServers.size() >= max) {
+        if (runningServers.size() >= getMaxServers()) {
             return MinecraftError.RESOURCE_LIMIT;
         }
 
@@ -149,6 +149,14 @@ public class ServerManager {
         return null;
     }
 
+    public List<String> getConsoleLines(String name) {
+        MinecraftServer server = getServer(name);
+        if (server == null) {
+            return List.of();
+        }
+        return server.getConsoleLines();
+    }
+
     @Transactional
     public void deleteServer(String name) {
         MinecraftServer server = getServer(name);
@@ -177,6 +185,13 @@ public class ServerManager {
             }
         }
         throw new IllegalStateException("利用可能なポートがありません。");
+    }
+
+    public int getMaxServers() {
+        if (max > 0) {
+            return max;
+        }
+        return properties.getMinecraft().getMaxServers();
     }
 
     public MinecraftServer getServer(String name) {

@@ -104,11 +104,11 @@ public class McHostProperties {
         }
 
         public int getMaxServers() {
-            return maxServers;
+            return maxServers <= 0 ? 50 : maxServers;
         }
 
         public void setMaxServers(int maxServers) {
-            this.maxServers = maxServers;
+            this.maxServers = maxServers <= 0 ? 50 : maxServers;
         }
 
         public boolean isAutoUpdatePaper() {
