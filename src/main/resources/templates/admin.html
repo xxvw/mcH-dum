@@ -11,142 +11,291 @@
     <script th:src="@{/js/admin-dashboard.js}" defer></script>
 </head>
 <body>
-<header class="topbar">
-    <div class="brand">
-        <span class="brand-mark">MC</span>
-        <div>
-            <h1>McHost Admin</h1>
-            <p id="publicIp" th:text="${publicIp}">127.0.0.1</p>
-        </div>
-    </div>
-    <div class="top-actions">
-        <span id="runningBadge" class="pill online" th:text="${runningCount + ' / ' + maxServers + ' running'}">0 / 50 running</span>
-        <span th:class="${discordEnabled} ? 'pill online' : 'pill muted'"
-              th:text="${discordEnabled} ? 'Discord online' : 'Web only'">Web only</span>
-    </div>
-</header>
-
-<main class="shell">
-    <p class="notice success" th:if="${message}" th:text="${message}"></p>
-    <p class="notice error" th:if="${error}" th:text="${error}"></p>
-    <p id="toast" class="notice" hidden></p>
-
-    <section class="command-strip">
-        <form class="create-form" method="post" th:action="@{/admin/servers}">
-            <label>
-                <span>Server name</span>
-                <input name="name" maxlength="64" pattern="[0-9A-Za-z_-]{1,64}" required>
-            </label>
-            <label class="check">
-                <input type="checkbox" name="start" value="true">
-                <span>Start now</span>
-            </label>
-            <button type="submit">Create</button>
-        </form>
-
-        <div class="server-picker">
-            <label>
-                <span>Active server</span>
-                <select id="serverSelect">
-                    <option th:each="server : ${servers}"
-                            th:value="${server.name}"
-                            th:text="${server.name + ' :' + server.port}">server :25000</option>
-                </select>
-            </label>
-            <div class="server-actions">
-                <form id="startForm" method="post">
-                    <button type="submit">Start</button>
-                </form>
-                <form id="stopForm" method="post">
-                    <button type="submit">Stop</button>
-                </form>
-                <form id="deleteForm" method="post">
-                    <button type="submit" class="danger">Delete</button>
-                </form>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="brand-mark">MC</span>
+            <div>
+                <h1>McHost</h1>
+                <p id="publicIp" th:text="${publicIp}">127.0.0.1</p>
             </div>
         </div>
-    </section>
 
-    <section class="overview">
-        <article class="scene-panel">
-            <canvas id="serverScene" aria-label="Server status visualization"></canvas>
-            <div class="scene-copy">
-                <span class="eyebrow">Cluster</span>
-                <strong id="sceneTitle">0 servers</strong>
-                <span id="sceneDetail">CPU 0% / Memory 0 B</span>
-            </div>
-        </article>
+        <nav class="main-nav" aria-label="Admin sections">
+            <button type="button" class="nav-item active" data-page="overview">
+                <span>01</span>
+                <strong>Overview</strong>
+            </button>
+            <button type="button" class="nav-item" data-page="servers">
+                <span>02</span>
+                <strong>Servers</strong>
+            </button>
+            <button type="button" class="nav-item" data-page="console">
+                <span>03</span>
+                <strong>Console</strong>
+            </button>
+            <button type="button" class="nav-item" data-page="files">
+                <span>04</span>
+                <strong>Files</strong>
+            </button>
+            <button type="button" class="nav-item" data-page="settings">
+                <span>05</span>
+                <strong>Settings</strong>
+            </button>
+        </nav>
 
-        <div class="metric-grid">
-            <article class="metric-card">
-                <span>Total</span>
-                <strong data-metric="totalServers">0</strong>
-                <small data-metric="runningServers">0 running</small>
-            </article>
-            <article class="metric-card">
-                <span>Memory</span>
-                <strong data-metric="usedMemory">0 B</strong>
-                <small data-metric="maxMemory">max 0 B</small>
-            </article>
-            <article class="metric-card">
-                <span>CPU</span>
-                <strong data-metric="processCpuLoad">0%</strong>
-                <small data-metric="systemCpuLoad">system 0%</small>
-            </article>
-            <article class="metric-card">
-                <span>Files</span>
-                <strong data-metric="dataSize">0 B</strong>
-                <small data-metric="diskFree">free 0 B</small>
-            </article>
+        <div class="sidebar-footer">
+            <span id="runningBadge" class="pill online" th:text="${runningCount + ' / ' + maxServers + ' running'}">0 / 50 running</span>
+            <span th:class="${discordEnabled} ? 'pill online' : 'pill muted'"
+                  th:text="${discordEnabled} ? 'Discord online' : 'Web only'">Web only</span>
         </div>
-    </section>
+    </aside>
 
-    <section class="workbench">
-        <article class="server-list-panel">
-            <div class="panel-head">
-                <h2>Servers</h2>
-                <span id="serverCount" class="muted">0</span>
+    <main class="crm-main">
+        <header class="page-topbar">
+            <div>
+                <span id="pageKicker" class="eyebrow">Operations</span>
+                <h2 id="pageTitle">Overview</h2>
             </div>
-            <div id="serverList" class="server-list"></div>
-        </article>
+            <div class="top-actions">
+                <label class="compact-field">
+                    <span>Active server</span>
+                    <select id="serverSelect">
+                        <option th:each="server : ${servers}"
+                                th:value="${server.name}"
+                                th:text="${server.name + ' :' + server.port}">server :25000</option>
+                    </select>
+                </label>
+                <span id="activeServerBadge" class="pill muted">No server</span>
+            </div>
+        </header>
 
-        <article class="console-panel">
-            <div class="panel-head">
-                <h2>Console</h2>
-                <span id="consoleState" class="muted">Idle</span>
-            </div>
-            <pre id="consoleOutput" class="console-output"></pre>
-            <form id="commandForm" class="command-form">
-                <input id="commandInput" name="command" placeholder="say hello">
-                <button type="submit">Send</button>
-            </form>
-        </article>
+        <p class="notice success" th:if="${message}" th:text="${message}"></p>
+        <p class="notice error" th:if="${error}" th:text="${error}"></p>
+        <p id="toast" class="notice" hidden></p>
 
-        <article class="files-panel">
-            <div class="panel-head">
-                <h2>Files</h2>
-                <button id="upButton" type="button" class="secondary">Up</button>
-            </div>
-            <div id="breadcrumb" class="breadcrumb">/</div>
-            <div id="fileList" class="file-list"></div>
-            <form id="uploadForm" class="upload-form">
-                <input id="uploadInput" type="file" name="file">
-                <button type="submit">Upload</button>
-            </form>
-        </article>
+        <section class="page-view active" data-page-view="overview">
+            <div class="overview-layout">
+                <article class="scene-panel">
+                    <canvas id="serverScene" aria-label="Server status visualization"></canvas>
+                    <div class="scene-copy">
+                        <span class="eyebrow">Cluster</span>
+                        <strong id="sceneTitle">0 servers</strong>
+                        <span id="sceneDetail">CPU 0% / Memory 0 B</span>
+                    </div>
+                </article>
 
-        <article class="editor-panel">
-            <div class="panel-head">
-                <h2>Editor</h2>
-                <span id="selectedFile" class="muted">No file</span>
+                <div class="metric-grid">
+                    <article class="metric-card">
+                        <span>Total servers</span>
+                        <strong data-metric="totalServers">0</strong>
+                        <small data-metric="runningServers">0 running</small>
+                    </article>
+                    <article class="metric-card">
+                        <span>Memory</span>
+                        <strong data-metric="usedMemory">0 B</strong>
+                        <small data-metric="maxMemory">max 0 B</small>
+                    </article>
+                    <article class="metric-card">
+                        <span>CPU</span>
+                        <strong data-metric="processCpuLoad">0%</strong>
+                        <small data-metric="systemCpuLoad">system 0%</small>
+                    </article>
+                    <article class="metric-card">
+                        <span>Files</span>
+                        <strong data-metric="dataSize">0 B</strong>
+                        <small data-metric="diskFree">free 0 B</small>
+                    </article>
+                </div>
             </div>
-            <textarea id="fileEditor" spellcheck="false"></textarea>
-            <div class="editor-actions">
-                <button id="saveFileButton" type="button">Save</button>
-                <button id="deleteFileButton" type="button" class="danger">Delete</button>
+
+            <div class="dashboard-band">
+                <article class="panel">
+                    <div class="panel-head">
+                        <h3>Server pipeline</h3>
+                        <span id="serverCount" class="muted">0 total</span>
+                    </div>
+                    <div id="serverList" class="server-list"></div>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-head">
+                        <h3>System profile</h3>
+                        <span class="muted">Live</span>
+                    </div>
+                    <dl class="profile-list">
+                        <div>
+                            <dt>Process CPU</dt>
+                            <dd data-metric="processCpuLoad">0%</dd>
+                        </div>
+                        <div>
+                            <dt>System CPU</dt>
+                            <dd data-metric="systemCpuLoad">system 0%</dd>
+                        </div>
+                        <div>
+                            <dt>Data size</dt>
+                            <dd data-metric="dataSize">0 B</dd>
+                        </div>
+                        <div>
+                            <dt>Disk free</dt>
+                            <dd data-metric="diskFree">free 0 B</dd>
+                        </div>
+                    </dl>
+                </article>
             </div>
-        </article>
-    </section>
-</main>
+        </section>
+
+        <section class="page-view" data-page-view="servers">
+            <div class="two-column">
+                <article class="panel">
+                    <div class="panel-head">
+                        <h3>Create server</h3>
+                        <span class="muted">Provision</span>
+                    </div>
+                    <form class="create-form" method="post" th:action="@{/admin/servers}">
+                        <label>
+                            <span>Server name</span>
+                            <input name="name" maxlength="64" pattern="[0-9A-Za-z_-]{1,64}" required>
+                        </label>
+                        <label class="check">
+                            <input type="checkbox" name="start" value="true">
+                            <span>Start now</span>
+                        </label>
+                        <button type="submit">Create</button>
+                    </form>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-head">
+                        <h3>Selected server</h3>
+                        <span id="selectedServerStatus" class="pill muted">Unknown</span>
+                    </div>
+                    <div class="server-actions">
+                        <form id="startForm" method="post">
+                            <button type="submit">Start</button>
+                        </form>
+                        <form id="stopForm" method="post">
+                            <button type="submit">Stop</button>
+                        </form>
+                        <form id="deleteForm" method="post">
+                            <button type="submit" class="danger">Delete</button>
+                        </form>
+                    </div>
+                    <dl class="profile-list selected-server-profile">
+                        <div>
+                            <dt>Port</dt>
+                            <dd id="selectedServerPort">-</dd>
+                        </div>
+                        <div>
+                            <dt>Storage</dt>
+                            <dd id="selectedServerSize">-</dd>
+                        </div>
+                        <div>
+                            <dt>Source</dt>
+                            <dd id="selectedServerSource">-</dd>
+                        </div>
+                    </dl>
+                </article>
+            </div>
+
+            <article class="panel">
+                <div class="panel-head">
+                    <h3>Server directory</h3>
+                    <span class="muted">CRM list</span>
+                </div>
+                <div id="serverTable" class="data-table"></div>
+            </article>
+        </section>
+
+        <section class="page-view" data-page-view="console">
+            <article class="panel console-page-panel">
+                <div class="panel-head">
+                    <h3>Console</h3>
+                    <span id="consoleState" class="muted">Idle</span>
+                </div>
+                <pre id="consoleOutput" class="console-output"></pre>
+                <form id="commandForm" class="command-form">
+                    <input id="commandInput" name="command" placeholder="say hello">
+                    <button type="submit">Send</button>
+                </form>
+            </article>
+        </section>
+
+        <section class="page-view" data-page-view="files">
+            <div class="files-layout">
+                <article class="panel files-panel">
+                    <div class="panel-head">
+                        <h3>File explorer</h3>
+                        <button id="upButton" type="button" class="secondary">Up</button>
+                    </div>
+                    <div id="breadcrumb" class="breadcrumb">/</div>
+                    <div id="fileList" class="file-list"></div>
+                    <form id="uploadForm" class="upload-form">
+                        <input id="uploadInput" type="file" name="file">
+                        <button type="submit">Upload</button>
+                    </form>
+                </article>
+
+                <article class="panel editor-panel">
+                    <div class="panel-head">
+                        <h3>Editor</h3>
+                        <span id="selectedFile" class="muted">No file</span>
+                    </div>
+                    <textarea id="fileEditor" spellcheck="false"></textarea>
+                    <div class="editor-actions">
+                        <button id="saveFileButton" type="button">Save</button>
+                        <button id="deleteFileButton" type="button" class="danger">Delete</button>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section class="page-view" data-page-view="settings">
+            <div class="settings-grid">
+                <article class="panel">
+                    <div class="panel-head">
+                        <h3>Workspace</h3>
+                        <span class="muted">Read only</span>
+                    </div>
+                    <dl class="profile-list">
+                        <div>
+                            <dt>Public IP</dt>
+                            <dd th:text="${publicIp}">127.0.0.1</dd>
+                        </div>
+                        <div>
+                            <dt>Discord</dt>
+                            <dd th:text="${discordEnabled} ? 'online' : 'web only'">web only</dd>
+                        </div>
+                        <div>
+                            <dt>Server cap</dt>
+                            <dd data-metric="maxServers">50</dd>
+                        </div>
+                    </dl>
+                </article>
+
+                <article class="panel">
+                    <div class="panel-head">
+                        <h3>Capacity</h3>
+                        <span class="muted">Runtime</span>
+                    </div>
+                    <dl class="profile-list">
+                        <div>
+                            <dt>Memory used</dt>
+                            <dd data-metric="usedMemory">0 B</dd>
+                        </div>
+                        <div>
+                            <dt>Memory max</dt>
+                            <dd data-metric="maxMemory">max 0 B</dd>
+                        </div>
+                        <div>
+                            <dt>Data size</dt>
+                            <dd data-metric="dataSize">0 B</dd>
+                        </div>
+                    </dl>
+                </article>
+            </div>
+        </section>
+    </main>
+</div>
 </body>
 </html>
